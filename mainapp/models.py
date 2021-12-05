@@ -1,9 +1,27 @@
+from PIL import Image
+
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
+from django.urls import reverse
 
 User = get_user_model()
+
+
+def get_product_url(obj, viwname):
+    ct_model = obj.__class__._meta.model_name
+    return reverse(viwname, kwargs={'ct_model': ct_model, 'slug': obj.slug})
+
+class MaxResolutionError(Exception):
+    pass
+
+
+class MinResolutionError(Exception):
+    pass
+
+class MaxImageSize(Exception):
+    pass
 
 
 class LatestProductManager:
@@ -33,10 +51,14 @@ class Category(models.Model):
     slug = models.SlugField(unique=True)
 
     def __str__(self):
-        return self.name
+        return self.slug
 
 
 class Product(models.Model):
+    MIN_RESOLUTION = (400, 400)
+    MAX_RESOLUTION = (1200, 1200)
+    MAX_IMAGE_SIZE = 1048576 * 3
+
     class Meta:
         abstract = True
 
@@ -49,6 +71,22 @@ class Product(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        image = self.image
+        img = Image.open(image)
+        min_width, min_height = self.MIN_RESOLUTION
+        max_width, max_height = self.MAX_RESOLUTION
+        if image.size > self.MAX_IMAGE_SIZE:
+            raise MaxImageSize('Размер изображения превышает 3МВ')
+        if img.width < min_width or img.height < min_height:
+            raise MinResolutionError('Разрешение изображения меньше минимального')
+        if img.width > max_width or img.height > max_height:
+            raise MaxResolutionError('Разрешение изображения больше максимального')
+        super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return get_product_url(self, 'product_detail')
 
 
 class Notebook(Product):
@@ -69,8 +107,8 @@ class Smartphone(Product):
     resolution = models.CharField(max_length=255, verbose_name='Разрешение экрана')
     accum_volume = models.CharField(max_length=255, verbose_name='Объем батареи')
     ram = models.CharField(max_length=255, verbose_name='Оперативная память')
-    sd = models.BooleanField(default=True)
-    sd_volume_max = models.CharField(max_length=255, verbose_name='Максимальный объем встраиваемой памяти')
+    sd = models.BooleanField(default=True, verbose_name='Наличие sd карты')
+    sd_volume_max = models.CharField(max_length=255, null=True, blank=True, verbose_name='Максимальный объем встраиваемой памяти')
     main_cam_mp = models.CharField(max_length=255, verbose_name='Главная камера')
     frontal_cam_mp = models.CharField(max_length=255, verbose_name='Фронтальная камера')
 
@@ -87,15 +125,17 @@ class CartProduct(models.Model):
     qty = models.PositiveIntegerField(default=1)
     final_price = models.DecimalField(max_digits=9, decimal_places=2, verbose_name='Общая цена')
 
-    # def __str__(self):
-    #     return 'Продукт: {} (для корзины)'.format(self.product.title)
+    def __str__(self):
+        return 'Продукт: {} (для корзины)'.format(self.content_object.title)
 
 
 class Cart(models.Model):
     owner = models.ForeignKey('Customer', verbose_name='Владелец', on_delete=models.CASCADE)
     products = models.ManyToManyField(CartProduct, blank=True, related_name='related_cart')
     total_products = models.PositiveIntegerField(default=0)
-    final_price = models.DecimalField(max_digits=9, decimal_places=2, verbose_name='Общая цена')
+    final_price = models.DecimalField(max_digits=9, decimal_places=2, default=0, verbose_name='Общая цена')
+    in_order = models.BooleanField(default=False)
+    for_anonymous_user = models.BooleanField(default=False)
 
     def __str__(self):
         return str(self.id)

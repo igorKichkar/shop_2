@@ -1,0 +1,29 @@
+{% extends 'mainapp/base.html' %}
+
+{% block content %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'main' %}">Главная</a></li>
+            <li class="breadcrumb-item"><a href="#">{{ product.category }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ product.title }}</li>
+        </ol>
+    </nav>
+    <div class="row">
+        <div class="col-md-4">
+            <h4 class="card-title">
+                <a href="#">{{ product.title }}</a>
+            </h4>
+            <a href="#"><img class="card-img-top" src="{{ product.image.url }}" class="img-fluid" alt=""></a>
+
+        </div>
+        <div class="col-md-8">
+            <h5>{{ product.price }} p.</h5>
+            <p class="card-text">{{ product.description }}</p>
+        </div>
+        {% if product.category.slug == 'noutbuki' %}
+            {% include 'mainapp/notebook.html' %}
+        {% elif product.category.slug == 'smartfony' %}
+            {% include 'mainapp/smartfony.html' %}
+        {% endif %}
+    </div>
+{% endblock content %}
